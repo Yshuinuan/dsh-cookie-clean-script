@@ -30,6 +30,7 @@ COOKIE_BYTES = 228     # serialized `dsh-auth-...=...; ` for one cookie
 RESERVED = 600         # request line + Chromium's own request headers, approx.
 KEEP_BACKUPS = 5
 APP_EXE_NAME = "DeepSeek Harness.exe"
+APP_DIR_NAME = "DeepSeek Harness"
 
 
 def default_db_path() -> Path:
@@ -39,12 +40,81 @@ def default_db_path() -> Path:
     return Path(appdata) / "@deepseek-ai" / "dsh-desktop" / "Network" / "Cookies"
 
 
-def app_executable() -> Path | None:
-    local = os.environ.get("LOCALAPPDATA")
-    if not local:
+def _registry_executable() -> Path | None:
+    """Find the install path the Desktop uninstaller registered."""
+    try:
+        import winreg
+    except ImportError:
         return None
-    exe = Path(local) / "Programs" / "DeepSeek Harness" / APP_EXE_NAME
-    return exe if exe.is_file() else None
+    roots = [
+        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ]
+    for hive, key in roots:
+        try:
+            root = winreg.OpenKey(hive, key)
+        except OSError:
+            continue
+        with root:
+            index = 0
+            while True:
+                try:
+                    sub = winreg.EnumKey(root, index)
+                except OSError:
+                    break
+                index += 1
+                try:
+                    with winreg.OpenKey(root, sub) as entry:
+                        name = winreg.QueryValueEx(entry, "DisplayName")[0]
+                        if not isinstance(name, str) or not name.startswith(APP_DIR_NAME):
+                            continue
+                        try:
+                            location = winreg.QueryValueEx(entry, "InstallLocation")[0]
+                        except OSError:
+                            location = ""
+                        if isinstance(location, str) and location:
+                            candidate = Path(location) / APP_EXE_NAME
+                            if candidate.is_file():
+                                return candidate
+                        try:
+                            icon = winreg.QueryValueEx(entry, "DisplayIcon")[0]
+                        except OSError:
+                            icon = ""
+                        if isinstance(icon, str) and icon:
+                            candidate = Path(icon.split(",")[0].strip().strip('"'))
+                            if candidate.is_file():
+                                return candidate
+                except OSError:
+                    continue
+    return None
+
+
+def app_executable(explicit: str | None = None) -> Path | None:
+    """Locate the Desktop executable: flag, env var, common paths, then the registry."""
+    if explicit:
+        candidate = Path(explicit)
+        return candidate if candidate.is_file() else None
+    from_env = os.environ.get("DSH_DESKTOP_EXE")
+    if from_env:
+        candidate = Path(from_env)
+        if candidate.is_file():
+            return candidate
+    for base in (
+        os.environ.get("LOCALAPPDATA"),
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+    ):
+        if not base:
+            continue
+        for candidate in (
+            Path(base) / APP_DIR_NAME / APP_EXE_NAME,
+            Path(base) / "Programs" / APP_DIR_NAME / APP_EXE_NAME,
+        ):
+            if candidate.is_file():
+                return candidate
+    return _registry_executable()
+
 
 
 def store_is_locked(path: Path) -> bool:
@@ -138,10 +208,11 @@ def clean(args: argparse.Namespace) -> int:
     return 0
 
 
-def launch_app() -> None:
-    exe = app_executable()
+def launch_app(explicit: str | None = None) -> None:
+    exe = app_executable(explicit)
     if exe is None:
         print("[warn] DSH Desktop executable not found; start it yourself.")
+        print("       Pass --exe <path> or set DSH_DESKTOP_EXE if it is installed elsewhere.")
         return
     subprocess.Popen([str(exe)], close_fds=True)
     print(f"launched     : {exe}")
@@ -153,16 +224,20 @@ def main() -> int:
     )
     parser.add_argument(
         "--db", type=Path, default=None,
-        help=r"cookie database path (default: %APPDATA%\@deepseek-ai\dsh-desktop\Network\Cookies)",
+        help=r"cookie database path (default: %%APPDATA%%\@deepseek-ai\dsh-desktop\Network\Cookies)",
     )
     parser.add_argument("--dry-run", action="store_true", help="only report, change nothing")
     parser.add_argument("--launch", action="store_true", help="start DSH Desktop afterwards")
+    parser.add_argument(
+        "--exe", default=None,
+        help="Desktop executable used by --launch (default: auto-detect)",
+    )
     parser.add_argument("--force", action="store_true", help="skip the in-use check (unsafe)")
     args = parser.parse_args()
 
     code = clean(args)
     if args.launch:
-        launch_app()
+        launch_app(args.exe)
     return code
 
 

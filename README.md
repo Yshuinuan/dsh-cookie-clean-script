@@ -14,6 +14,16 @@ Chromium 会把它们全部留在 `%APPDATA%\@deepseek-ai\dsh-desktop\Network\Co
 
 先**完全退出 DSH**（含托盘图标 → 退出）。脚本检测到 cookie 库仍被占用时会直接退出（退出码 2），不会改任何东西。
 
+## 需要配置什么吗？
+
+不用。下载后直接双击 `clear-dsh-cookies.cmd` 就行，脚本会自己找位置：
+
+- **cookie 库**：所有 Windows 安装都固定在 `%APPDATA%\@deepseek-ai\dsh-desktop\Network\Cookies`，不需要指向 DSH 的安装目录。
+- **DSH 程序**（只有 `--launch` 会用到）：依次尝试 `--exe <路径>`、环境变量 `DSH_DESKTOP_EXE`、默认安装目录（`%LOCALAPPDATA%\Programs\DeepSeek Harness`、`%ProgramFiles%` 等），最后查卸载注册表里登记的安装路径。
+- 实在找不到时：只清理、不启动，并提示你加 `--exe`。
+
+系统要求：Windows；已安装 DSH 桌面版；Python 3（DSH 自带的运行时会被优先使用，自己装过 Python 也可以）。
+
 ## 用法
 
 先预览（不改动）：
@@ -45,7 +55,7 @@ Chromium 会把它们全部留在 `%APPDATA%\@deepseek-ai\dsh-desktop\Network\Co
 3. 名称随意，例如 `DeepSeek Harness (清理启动)`
 4. 以后**只从这个图标启动 DSH**（原来的桌面/任务栏图标删掉或替换掉）；想固定到任务栏，把快捷方式拖到任务栏即可
 
-> 仓库里不含 `.lnk` 文件：快捷方式里是本机绝对路径，换台电脑就失效，请按上面步骤自建。
+> 仓库里不含 `.lnk` 文件：`.lnk` 是 Windows 快捷方式（就是桌面图标那个文件），里面记录的是**本机绝对路径**和图标，换台电脑就失效，所以仓库只提交脚本本体，快捷方式按上面步骤自建。
 
 ### 行为说明
 
@@ -61,6 +71,7 @@ Chromium 会把它们全部留在 `%APPDATA%\@deepseek-ai\dsh-desktop\Network\Co
 | `--db <路径>` | 指定 cookie 库（默认 `%APPDATA%\@deepseek-ai\dsh-desktop\Network\Cookies`） |
 | `--dry-run` | 只统计、不删除 |
 | `--launch` | 清理后启动 DSH 桌面版 |
+| `--exe <路径>` | `--launch` 时启动哪个程序（默认自动查找） |
 | `--force` | 跳过「正在使用」检查（不建议） |
 
 ## 安全说明
