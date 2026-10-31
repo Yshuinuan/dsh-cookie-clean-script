@@ -1,0 +1,10 @@
+# Windows shortcut: absolute paths, useless on another machine
+*.lnk
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local backups produced by the script
+Cookies.bak-*
+*.bak-*
